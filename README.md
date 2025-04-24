@@ -8,7 +8,8 @@ as hmmer hmm "databases" (compressed and indexed HMMs), for the LIS, SoyBase, an
 Also see https://github.com/legumeinfo/lis_gfa/ , which accomplishes the same task, using a singularity container
 rather than a conda environment. The approaches mainly differ in the hmmsearch intermediate formats and parsing approaches.
 The management of parallelization is also somewhat different -- the present repo relying more on parallelization
-via spawning multiple `hmmsearch` tasks and `lis_gfa` relying on the --cpu parameter of hmmsearch.
+via spawning multiple `hmmsearch` tasks and `lis_gfa` relying on the `--cpu` parameter of `hmmsearch`.  The present approach 
+should be faster, considering IO limitations of `hmmsearch` -- but we have not benchmarked the two methods yet.
 
 ## Installation method 1: installation of scripts and dependencies with conda
 
