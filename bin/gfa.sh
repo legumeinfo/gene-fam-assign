@@ -115,7 +115,7 @@ cat $LIST | while read -r filepath; do
   if [[ -f $filepath ]]; then
     if [[ $filepath =~ \.gz$ ]]; then
       file=`basename $filepath .gz`
-      if [[ -f $filepath ]]; then
+      if [[ -f 00_fasta/$file ]]; then
         echo "  Uncompressed file exists already at 00_fasta/$file"
       else
         echo "  Uncompressing input to 00_fasta/$file"
