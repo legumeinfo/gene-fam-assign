@@ -38,8 +38,9 @@ See the example: `batch_gfa.sh`
 The job script accomplishes three things (apart from requesting system resources):
  - Loads the dependencies -- comprised of the hmmer package (the example script uses conda)
  - Adds scripts (in bin/) to the PATH
- - Calls the driver script, thus:
-```
-    gfa.sh -l data/lis.protein_files
-```
+ - Calls the driver script, e.g. `gfa.sh -l data/lis.protein_files`
 
+Call the batch script like so (assuming slurm and the batch script by this name):
+```
+  sbatch batch_gfa.sh
+```
