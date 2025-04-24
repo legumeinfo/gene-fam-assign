@@ -5,6 +5,10 @@ The code in this repository manages the assignment of gene sets (proteomes) to g
 as hmmer hmm "databases" (compressed and indexed HMMs), for the LIS, SoyBase, and PeanutBase projects
 (or generally, for any set of proteomes against an HMM collection).
 
+Also see https://github.com/legumeinfo/lis_gfa/ , which accomplishes the same task, using a singularity container
+rather than a conda environment. The approaches mainly differ in the hmmsearch intermediate formats and parsing approaches.
+The management of parallelization is also somewhat different -- the present repo relying more on parallelization
+via spawning multiple `hmmsearch` tasks and `lis_gfa` relying on the --cpu parameter of hmmsearch.
 
 ## Installation method 1: installation of scripts and dependencies with conda
 
