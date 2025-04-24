@@ -34,8 +34,8 @@ this repository (or if in another location, indicate the path in the config dire
 
 Modify the few lines of the config -- at least specifying the hmm database name.
 
-Then call the driver script, `gfa.sh`, with at least the `-l" parameter (the list of filepaths to compressed fasta files):
-The (gzipped) fasta files should be local to your filesystem.
+Then call the driver script, `gfa.sh`, with at least the `-l lis.protein_files` parameter (the list of filepaths to the 
+compressed fasta files). The (gzipped) fasta files should be local to your filesystem.
 
 It is presumed that the work will be done on a HPC resource, called via a slurm or comparable job submission script. 
 See the example: `batch_gfa.sh`
