@@ -11,9 +11,12 @@ The management of parallelization is also somewhat different -- the present repo
 via spawning multiple `hmmsearch` tasks and `lis_gfa` relying on the `--cpu` parameter of `hmmsearch`.  The present approach 
 should be faster, considering IO limitations of `hmmsearch` -- but we have not benchmarked the two methods yet.
 
-## Installation method 1: installation of scripts and dependencies with conda
+## Installation
 
-Create a conda environment called `pandagma` from the environment.yml in this repository:
+The only required dependency is the [hmmer package](http://hmmer.org). Install this and put
+the executables on your path however you prefer. One way:
+
+To create a conda environment called `hmmer` from the environment.yml in this repository:
 
     conda env create
 
