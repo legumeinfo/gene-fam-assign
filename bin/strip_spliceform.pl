@@ -9,9 +9,11 @@
 while (<>){
   my @F = split(/\t/, $_);
   if ( $F[2] =~ /(.+)\.\w\d+$/ ||
+       $F[2] =~ /(.+\w\w+)\.\d{1,2}\.\d{1,2}$/ ||
        $F[2] =~ /(.+)\.\d+$/ ||
        $F[2] =~ /(.+)-T\d+$/ ||
-       $F[2] =~ /(.+)\.mRNA\d+$/ ){
+       $F[2] =~ /(.+)\.mRNA\d+$/ ||
+       $F[2] =~ /^([^.]+\.[^.]+\.[^.]+\.[^.]+\.[^.]+)$/ ){
          $F[2]=$1; print join("\t",@F)
        }
   else { $F[2]="XX"; print join ("\t",@F) } # print a flag; this data will need special handling
