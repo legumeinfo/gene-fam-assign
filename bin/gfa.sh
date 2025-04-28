@@ -21,17 +21,18 @@ SYNOPSIS
 
   Required:
            -l  - path to list of file paths to compressed (.gz) fasta files
+           -c  - path to the config file
 
   Options: -h  - help
-           -c  - path to the config file; default [config/gfa.conf] 
+           -t  - threads (or may be set in config file; see comments below)
 
   VARIABLES set in config file:
-    hmmdb       - Name of hmmer HMM data files (sans .h suffixes). HMM database should be in the data directory
-    evalue      - E-value threshold for hmmsearch [1e-10]
-    data_dir    - Directory for HMM database [data]; also a reasonable place to put the list of fasta filepaths
-    work_dir    - Directory where all work will be done
-    threads     - Value for hmmsearch --cpu. [2] Recommended to be small (2), as most of the parallelism comes
-                    from running on multiple query files, determined by available threads.
+    hmmdb    - Name of hmmer HMM data files (sans .h suffixes). HMM database should be in the data directory
+    evalue   - E-value threshold for hmmsearch [1e-10]
+    data_dir - Directory for HMM database [data]; also a reasonable place to put the list of fasta filepaths
+    work_dir - Directory where all work will be done
+    threads  - Value for hmmsearch --cpu. [2] Recommended to be small (2), as most of the parallelism comes
+                 from running on multiple query files, determined by available threads.
 
 AUTHORS
     Steven Cannon <steven.cannon@usda.gov>, Andrew Farmer <adf@ncgr.org>
@@ -41,24 +42,16 @@ if [ "$#" -eq 0 ]; then
   echo >&2 "$HELP_DOC" && exit 0;
 fi
 
-NPROC=$( ( command -v nproc > /dev/null && nproc ) || getconf _NPROCESSORS_ONLN)
-config="null"
-
-export NPROC=${NPROC:-1}
-if [[ $NPROC -gt 1 ]]; then HALF_NPROC=$(( NPROC / 2 )); else HALF_NPROC=1; fi
-
 # Command-line interpreter
 filepath_list="null"
-config="config/gfa.conf"
-# Add shell variables from config file
-# shellcheck source=/dev/null
-. "${config}"
+config="null"
 
-while getopts "l:c:h" opt
+while getopts "l:c:t:h" opt
 do
   case $opt in
     l) filepath_list=$OPTARG; echo "filepath_list: $config" ;;
     c) config=$OPTARG; echo "config: $config" ;;
+    t) threads=$OPTARG; echo "threads: $threads" ;;
     h) echo >&2 "$HELP_DOC" && exit 0 ;;
     *) echo >&2 echo "$HELP_DOC" && exit 1 ;;
   esac
@@ -68,6 +61,15 @@ if [ "$filepath_list" == "null" ]; then
   printf "\nPlease provide the path to a list of (compressed) fasta files to be searched: -l filepath_list\n" >&2
   exit 1;
 fi
+
+if [ "$config" == "null" ]; then
+  printf "\nPlease provide the path to the config file, e.g. -c config/gfa.conf\n" >&2
+  exit 1;
+fi
+
+# Add shell variables from config file
+# shellcheck source=/dev/null
+. "${config}"
 
 # Check for existence of third-party executables
 missing_req=0
@@ -94,6 +96,16 @@ LIST=$(realpath "$filepath_list")
 DATA=$(realpath "$data_dir")
 EVALUE="$evalue"
 THREADS="$threads"
+
+NPROC=$( ( command -v nproc > /dev/null && nproc ) || getconf _NPROCESSORS_ONLN)
+
+export NPROC=${NPROC:-1}
+if [[ $NPROC -gt 1 ]]; then NPROC_PER_THREAD=$(( NPROC / THREADS )); else NPROC_PER_THREAD=1; fi
+if [[ $NPROC_PER_THREAD -lt 1 ]]; then NPROC_PER_THREAD=1; fi
+echo "NPROC: $NPROC"
+echo "THREADS: $THREADS"
+echo "NPROC_PER_THREAD: $NPROC_PER_THREAD"
+echo "WORK_DIR: $WORK"
 
 WD=$(realpath "$WORK")
 mkdir -p "${WD}"
@@ -131,10 +143,11 @@ echo "== Search fasta files against HMM database"
 echo
 for querypath in 00_fasta/*; do
   base=$(basename "$querypath" .faa)
+  echo "hmmsearch -E $EVALUE --cpu $THREADS --tblout 01_hmmsearch/$base.hmmsearch.tbl -o /dev/null ${DATA}/${hmmdb} ${querypath}"
   hmmsearch -E "$EVALUE" --cpu "$THREADS" --tblout 01_hmmsearch/"$base".hmmsearch.tbl -o /dev/null \
      "${DATA}"/"${hmmdb}" "${querypath}" &
-  # allow to execute up to $HALF_NPROC in parallel
-  if [[ $(jobs -r -p | wc -l) -ge ${HALF_NPROC} ]]; then wait -n; fi
+  # allow to execute up to $NPROC_PER_THREAD in parallel
+  if [[ $(jobs -r -p | wc -l) -ge ${NPROC_PER_THREAD} ]]; then wait -n; fi
 done
 wait
 
