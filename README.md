@@ -20,11 +20,11 @@ To create a conda environment called `hmmer` from the environment.yml in this re
 
     conda env create
 
-Then activate the conda environment:
+Then activate the conda environment (the command for environment activation may differ depending on the platform):
 ```
-    conda activate pandagma
+    conda activate hmmer
       #or
-    source activate pandagma
+    source activate hmmer
 ```
 
 ## Preparing for a run by creating the HMM database (if not yet created)
