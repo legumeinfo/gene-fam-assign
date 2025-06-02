@@ -1,3 +1,4 @@
 # Ignore the following
 /data/
 /work_dir/
+slurm*
