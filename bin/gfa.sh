@@ -146,7 +146,7 @@ echo
 for querypath in 00_fasta/*; do
   base=$(basename "$querypath" .faa)
   echo "hmmsearch -E $EVALUE --cpu $THREADS --tblout 01_hmmsearch/$base.hmmsearch.tbl -o /dev/null ${DATA}/${hmmdb} ${querypath}"
-#  hmmsearch -E "$EVALUE" --cpu "$THREADS" --tblout 01_hmmsearch/"$base".hmmsearch.tbl -o /dev/null "${DATA}"/"${hmmdb}" "${querypath}" &
+  hmmsearch -E "$EVALUE" --cpu "$THREADS" --tblout 01_hmmsearch/"$base".hmmsearch.tbl -o /dev/null "${DATA}"/"${hmmdb}" "${querypath}" &
   # allow to execute up to $NPROC_PER_THREAD in parallel
   if [[ $(jobs -r -p | wc -l) -ge ${NPROC_PER_THREAD} ]]; then wait -n; fi
 done
