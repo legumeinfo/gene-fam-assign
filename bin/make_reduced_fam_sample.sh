@@ -133,7 +133,7 @@ elif [[ $method == "mmseqs" ]]; then
     mmseqs easy-cluster "$filepath"  "31_mmseqs_sample/$base"  31_mmseqs_sample_tmp --min-seq-id "$min_id" -c "$min_id" --cov-mode 0 -v 1
 
     rep_seq="$base$rep_suffix"
-    echo "$base $rep_seq"
+    #echo "$base $rep_seq"
     fasta_to_table.awk "$rep_seq" | awk -v FAM="$base" '{print ">" FAM "__" $1; print $2}' >> 19_palmp.sample.faa
   
     ((++count))
@@ -153,7 +153,7 @@ elif [[ $method == "hybrid" ]]; then
 
       rep_seq="$base$rep_suffix"
       echo "$base $rep_seq"
-      fasta_to_table.awk "$rep_seq" | awk -v FAM="$base" '{print ">" FAM "__" $1; print $2}' >> 19_palmp.sample.faa
+      fasta_to_table.awk "31_mmseqs_sample/$rep_seq" | awk -v FAM="$base" '{print ">" FAM "__" $1; print $2}' >> 19_palmp.sample.faa
     else
       fasta_to_table.awk "$filepath" | shuf | awk -v FAM="$base" '{print ">" FAM "__" $1; print $2; ct++}' >> 19_palmp.sample.faa
     fi
