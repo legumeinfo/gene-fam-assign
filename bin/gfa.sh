@@ -120,6 +120,9 @@ run_ingest() {
   echo "== Copy files into working directory, and uncompress"
   cd "${WD}" || exit
   mkdir -p 00_fasta 01_hmmsearch 02_gfa
+
+  query_list=()
+  ct=0
   
   echo "$LIST"
   cat "$LIST"
@@ -131,6 +134,9 @@ run_ingest() {
       if [ -f "$filepath" ]; then
         if [[ "$filepath" =~ \.gz$ ]]; then
           file=$(basename "$filepath" .gz)
+          query_list+=("$file")
+          ct=$((ct+1))
+          printf '%s\n' "$ct ${query_list[@]}"
           if [ -f 00_fasta/"$file" ]; then
             echo "  Uncompressed file exists already at 00_fasta/$file"
           else
@@ -139,6 +145,9 @@ run_ingest() {
           fi
         else
           file=$(basename "$filepath")
+          query_list+=("$file")
+          ((ct++))
+          printf '%s\n' "$ct ${query_list[@]}"
           echo "  File appears to be uncompressed; use as-is: $file"
           cat "$filepath" > 00_fasta/"$file"
         fi
@@ -147,6 +156,10 @@ run_ingest() {
       fi
     fi
   done
+
+  echo "Printing query_list ====="
+  printf '%s\n' "$ct ${query_list[@]}"
+  echo "====="
 }
 
 run_search_families() {
@@ -171,13 +184,16 @@ run_search_families() {
     target_ext="${prot_fam_path##*.}"
     target_base=$(basename "$prot_fam_path" ".$target_ext")
 
-    for filepath in 00_fasta/*; do
-      ext="${filepath##*.}"
-      base=$(basename "$filepath" ."$ext")
+    for filename in ${query_list[@]}; do
+      ext="${filename##*.}"
+      base=$(basename "$filename" ."$ext")
+
+      echo "TEST: $base $ext"
+
       echo "  Search $base.$ext against a sampling of sequences in families in target to determine best family match"
-      echo "  mmseqs easy-search $filepath $prot_fam_path 33_fam_match/$base.x.$target_base.m8 \\"
+      echo "  mmseqs easy-search 00_fasta/$filename $prot_fam_path 33_fam_match/$base.x.$target_base.m8 \\"
       echo "    33_mmseqs_tmp --search-type ${SEQTYPE} --cov-mode 0 -c ${clust_cov} -v 1"
-      mmseqs easy-search "$filepath" \
+      mmseqs easy-search "00_fasta/$filename" \
                          "$prot_fam_path" \
                          33_fam_match/"$base".x.$target_base.m8 \
                          33_mmseqs_tmp \
@@ -185,10 +201,6 @@ run_search_families() {
     done
 
     # In the regex below, the targets look like GeneFamID__GeneID  ... and the __GeneID is discarded (leaving 12 columns)
-    # NOTE: until early August 2026, calc_avg_bitscore_per_fam_hit.awk was used at this point to minimize the effects of
-    # outliers (e.g. a chimera) in a family, which could unduly attract a query sequence to it when a better "average" match is to another family.
-    # However, calc_avg_bitscore_per_fam_hit.awk was removed on 2026/08/06 as it also had the effect of sometimes suppressing perfect hits
-    # between the query and the same sequence as target, whereas such an identical hit should be retained.
     for filepath in 33_fam_match/*.m8; do
       base=$(basename "$filepath")
       < "$filepath" perl -pe 's/^(\S+)\t([^_]+)__\S+/$1\t$2/' | # sort -k1,1 -k2,2 | calc_avg_bitscore_per_fam_hit.awk |
@@ -217,13 +229,13 @@ run_search_families() {
 
   elif [ "$search_method" == "hmmsearch" ]; then
 
-    for filepath in 00_fasta/*; do
-      ext="${filepath##*.}"
-      base=$(basename "$filepath" ."$ext")
+    for filename in ${query_list[@]}; do
+      ext="${filename##*.}"
+      base=$(basename "$filename" ."$ext")
       # Set --cpu 2 for hmmsearch because it is IO bound. Rather, get parallelization by running the searches in parallel.
       echo "== Search $base.$ext against a HMMer database (compressed and indexed HMMs)"
-      echo "    hmmsearch -E $evalue --cpu 2 --tblout 33_fam_match/$base.hmmsearch.tbl -o /dev/null ${hmmdb_path} ${filepath}"
-      hmmsearch -E "$evalue" --cpu 2 --tblout 33_fam_match/"$base".hmmsearch.tbl -o /dev/null "${hmmdb_path}" "${filepath}" &
+      echo "    hmmsearch -E $evalue --cpu 2 --tblout 33_fam_match/$base.hmmsearch.tbl -o /dev/null ${hmmdb_path} 00_fasta/${filename}"
+      hmmsearch -E "$evalue" --cpu 2 --tblout 33_fam_match/"$base".hmmsearch.tbl -o /dev/null "${hmmdb_path}" 00_fasta/"${filename}" &
       # allow to execute up to $NPROC/2 in parallel
       if [[ $(jobs -r -p | wc -l) -ge $((NPROC/2)) ]]; then wait -n; fi
     done
