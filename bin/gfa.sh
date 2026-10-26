@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# shellcheck disable=SC2154
-
 set -o errexit -o errtrace -o nounset -o pipefail -o posix
 
 trap 'echo ${0##*/}:${LINENO} ERROR executing command: ${BASH_COMMAND}' ERR
@@ -127,7 +125,7 @@ run_ingest() {
   echo "$LIST"
   cat "$LIST"
   echo
-  cat "$LIST" | while read -r filepath; do
+  while read -r filepath; do
     if [[ "$filepath" == \#* ]]; then
       break
     else 
@@ -136,7 +134,6 @@ run_ingest() {
           file=$(basename "$filepath" .gz)
           query_list+=("$file")
           ct=$((ct+1))
-          printf '%s\n' "$ct ${query_list[@]}"
           if [ -f 00_fasta/"$file" ]; then
             echo "  Uncompressed file exists already at 00_fasta/$file"
           else
@@ -145,9 +142,8 @@ run_ingest() {
           fi
         else
           file=$(basename "$filepath")
-          query_list+=("$file")
           ((ct++))
-          printf '%s\n' "$ct ${query_list[@]}"
+          printf '%s\n' "${query_list[@]}"
           echo "  File appears to be uncompressed; use as-is: $file"
           cat "$filepath" > 00_fasta/"$file"
         fi
@@ -155,10 +151,10 @@ run_ingest() {
         echo "  WARN: File $filepath was not found."
       fi
     fi
-  done
+  done < "$LIST"
 
-  echo "Printing query_list ====="
-  printf '%s\n' "$ct ${query_list[@]}"
+  echo "===== query_list"
+  printf '  %s\n' "${query_list[@]}"
   echo "====="
 }
 
@@ -184,7 +180,7 @@ run_search_families() {
     target_ext="${prot_fam_path##*.}"
     target_base=$(basename "$prot_fam_path" ".$target_ext")
 
-    for filename in ${query_list[@]}; do
+    for filename in "${query_list[@]}"; do
       ext="${filename##*.}"
       base=$(basename "$filename" ."$ext")
 
@@ -195,7 +191,7 @@ run_search_families() {
       echo "    33_mmseqs_tmp --search-type ${SEQTYPE} --cov-mode 0 -c ${clust_cov} -v 1"
       mmseqs easy-search "00_fasta/$filename" \
                          "$prot_fam_path" \
-                         33_fam_match/"$base".x.$target_base.m8 \
+                         33_fam_match/"$base.x.$target_base.m8" \
                          33_mmseqs_tmp \
                          --search-type ${SEQTYPE} --cov-mode 0 -c "${clust_cov}" -v 1
     done
@@ -229,7 +225,7 @@ run_search_families() {
 
   elif [ "$search_method" == "hmmsearch" ]; then
 
-    for filename in ${query_list[@]}; do
+    for filename in "${query_list[@]}"; do
       ext="${filename##*.}"
       base=$(basename "$filename" ."$ext")
       # Set --cpu 2 for hmmsearch because it is IO bound. Rather, get parallelization by running the searches in parallel.
