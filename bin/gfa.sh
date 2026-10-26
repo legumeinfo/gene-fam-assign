@@ -168,15 +168,18 @@ run_search_families() {
 
     SEQTYPE=1 # 3=nuc; 1=pep
 
+    target_ext="${prot_fam_path##*.}"
+    target_base=$(basename "$prot_fam_path" ".$target_ext")
+
     for filepath in 00_fasta/*; do
       ext="${filepath##*.}"
       base=$(basename "$filepath" ."$ext")
-      echo "  Search $base.$ext against a sampling of sequences in families in 19_palmp to determine best family match"
-      echo "  mmseqs easy-search $filepath $prot_fam_path 33_fam_match/$base.x.19_palmp.fam_ID.m8 \\"
+      echo "  Search $base.$ext against a sampling of sequences in families in target to determine best family match"
+      echo "  mmseqs easy-search $filepath $prot_fam_path 33_fam_match/$base.x.$target_base.m8 \\"
       echo "    33_mmseqs_tmp --search-type ${SEQTYPE} --cov-mode 0 -c ${clust_cov} -v 1"
       mmseqs easy-search "$filepath" \
                          "$prot_fam_path" \
-                         33_fam_match/"$base".x.19_palmp.fam_ID.m8 \
+                         33_fam_match/"$base".x.$target_base.m8 \
                          33_mmseqs_tmp \
                          --search-type ${SEQTYPE} --cov-mode 0 -c "${clust_cov}" -v 1
     done
@@ -204,7 +207,7 @@ run_search_families() {
 
     echo "== Derive gene family assignment (gfa) files"
     for file in 33_fam_match/*.m8.top; do
-      base=$(basename "$file" .x.19_palmp.fam_ID.m8.top)
+      base=$(basename "$file" .x.target_base.m8.top)
       echo "$base";
       cat "$file" |
         awk -v OFS="\t" 'BEGIN{print "#gene", "family", "protein", "e-value", "score"}
