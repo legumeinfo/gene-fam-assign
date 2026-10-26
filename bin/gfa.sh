@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# shellcheck disable=SC2154
-
 set -o errexit -o errtrace -o nounset -o pipefail -o posix
 
 trap 'echo ${0##*/}:${LINENO} ERROR executing command: ${BASH_COMMAND}' ERR
@@ -12,12 +10,15 @@ define(){ o=; while IFS=$'\n' read -r a; do o="$o$a"'
 
 define HELP_DOC <<'EOS'
 NAME
-  hmmsearch-to-gfa.sh  -- Given a database of gene family HMMs (a concatenation of HMMs produced by hmmbuild, then 
-    compressed with hmmpress), manage the search of a collection of fasta files against the database and
-    the subsequent parsing into tabular "gene family assignment" files.
+  gfa.sh  -- Given either a database of gene family HMMs (a concatenation of HMMs produced by hmmbuild,
+    then compressed with hmmpress), or a collection of family multi-fasta protein files representing 
+    all gene families, with defline formats like the following ...
+      >Legume.fam3.00001__glyma.Wm82.gnm4.ann1.Glyma.06G281100.1
+    manage the search of a collection of fasta files against the database and the subsequent parsing 
+    into tabular "gene family assignment" files.
 
 SYNOPSIS
-  hmmsearch-to-gfa.sh -l filepath_list
+  gfa.sh -l filepath_list
 
   Required:
            -l  - path to list of file paths to compressed (.gz) fasta files
@@ -27,15 +28,19 @@ SYNOPSIS
            -t  - threads (or may be set in config file; see comments below)
 
   VARIABLES set in config file:
-    hmmdb    - Name of hmmer HMM data files (sans .h suffixes). HMM database should be in the data directory
-    evalue   - E-value threshold for hmmsearch [1e-10]
-    data_dir - Directory for HMM database [data]; also a reasonable place to put the list of fasta filepaths
-    work_dir - Directory where all work will be done
-    threads  - Value for hmmsearch --cpu. [2] Recommended to be small (2), as most of the parallelism comes
-                 from running on multiple query files, determined by available threads.
+    search_method - align_sample (against family protein files) or  hmmsearch (against family HMMs)
+    hmmdb_path    - Name of hmmer HMM data files (sans .h suffixes). HMM database should be in the data directory
+    prot_fam_path - Path to multi-fasta protein file representing all gene families
+    evalue        - E-value threshold for hmmsearch [1e-10]
+    consen_iden   - Minimum identity threshold for mmseqs matches [0.30]
+    clust_cov     - Minimum alignment coverage for mmseqs matches [0.40]
+    data_dir      - Directory for HMM database [data]; also a reasonable place to put the list of fasta filepaths
+    work_dir      - Directory where all work will be done
+    threads       - Value for hmmsearch --cpu. [2] Recommended to be small (2), as most of the parallelism comes
+                    from running on multiple query files, determined by available threads.
 
-AUTHORS
-    Steven Cannon <steven.cannon@usda.gov>, Andrew Farmer <adf@ncgr.org>
+AUTHOR
+    Steven Cannon <steven.cannon@usda.gov>
 EOS
 
 if [ "$#" -eq 0 ]; then
@@ -73,7 +78,7 @@ fi
 
 # Check for existence of third-party executables
 missing_req=0
-dependencies='hmmsearch'
+dependencies='hmmsearch mmseqs'
 for program in $dependencies; do
   if ! type "$program" &> /dev/null; then
     echo "Warning: executable $program is not on your PATH."
@@ -91,11 +96,9 @@ fi
 echo
 echo "== Copy files into work directory, and uncompress."
 
-WORK="$work_dir"
 LIST=$(realpath "$filepath_list")
-DATA=$(realpath "$data_dir")
-EVALUE="$evalue"
 THREADS="$threads"
+WORK_DIR="$work_dir"
 
 NPROC=$( ( command -v nproc > /dev/null && nproc ) || getconf _NPROCESSORS_ONLN)
 
@@ -105,73 +108,179 @@ if [[ $NPROC_PER_THREAD -lt 1 ]]; then NPROC_PER_THREAD=1; fi
 echo "NPROC: $NPROC"
 echo "THREADS: $THREADS"
 echo "NPROC_PER_THREAD: $NPROC_PER_THREAD"
-echo "WORK_DIR: $WORK"
+echo "WORK_DIR: $WORK_DIR"
 
-WD=$(realpath "$WORK")
+WD=$(realpath "$WORK_DIR")
 mkdir -p "${WD}"
-cd "${WD}" || exit
 
-mkdir -p 00_fasta 01_hmmsearch 02_gfa
+run_ingest() {
+  echo
+  echo "== Copy files into working directory, and uncompress"
+  cd "${WD}" || exit
+  mkdir -p 00_fasta 01_hmmsearch 02_gfa
 
-echo
-echo "== Copy files into working directory, uncompressing them for access by hmmsearch"
-echo
-cat "$LIST" | while read -r filepath; do
-  if [[ "$filepath" == \#* ]]; then
-    break
-  else 
-    if [ -f "$filepath" ]; then
-      if [[ "$filepath" =~ \.gz$ ]]; then
-        file=$(basename "$filepath" .gz)
-        if [ -f 00_fasta/"$file" ]; then
-          echo "  Uncompressed file exists already at 00_fasta/$file"
+  query_list=()
+  ct=0
+  
+  echo "$LIST"
+  cat "$LIST"
+  echo
+  while read -r filepath; do
+    if [[ "$filepath" == \#* ]]; then
+      break
+    else 
+      if [ -f "$filepath" ]; then
+        if [[ "$filepath" =~ \.gz$ ]]; then
+          file=$(basename "$filepath" .gz)
+          query_list+=("$file")
+          ct=$((ct+1))
+          if [ -f 00_fasta/"$file" ]; then
+            echo "  Uncompressed file exists already at 00_fasta/$file"
+          else
+            echo "  Uncompressing input to 00_fasta/$file"
+            gzip -dc "$filepath" > 00_fasta/"$file"
+          fi
         else
-          echo "  Uncompressing input to 00_fasta/$file"
-          gzip -dc "$filepath" > 00_fasta/"$file"
+          file=$(basename "$filepath")
+          ((ct++))
+          printf '%s\n' "${query_list[@]}"
+          echo "  File appears to be uncompressed; use as-is: $file"
+          cat "$filepath" > 00_fasta/"$file"
         fi
       else
-        file=$(basename "$filepath")
-        echo "  File appears to be uncompressed; use as-is: $file"
-        cat "$filepath" > 00_fasta/"$file"
+        echo "  WARN: File $filepath was not found."
       fi
-    else
-      echo "  WARN: File $filepath was not found."
     fi
+  done < "$LIST"
+
+  echo "===== query_list"
+  printf '  %s\n' "${query_list[@]}"
+  echo "====="
+}
+
+run_search_families() {
+  cd "${WD}" || exit
+  echo "Search provided annotation sets (protein) against family consensus sequences or HMMs"
+
+  if [ -d 33_fam_match ]; then rm -rf 33_fam_match; fi
+  mkdir -p 33_fam_match
+
+  if [ "$search_method" == "align_sample" ]; then
+    mkdir -p 33_mmseqs_tmp
+
+    if [ ! -f "${prot_fam_path}" ]; then
+      echo "To place the supplementary sequences into gene families, the directory ${prot_fam_path} must exist"
+      echo "(containing protein sequence in each family, from a previous run of \"pandagma fam\")."
+      echo "The specified prot_fam_path was: ${prot_fam_path}"
+      exit 1
+    fi
+
+    SEQTYPE=1 # 3=nuc; 1=pep
+
+    target_ext="${prot_fam_path##*.}"
+    target_base=$(basename "$prot_fam_path" ".$target_ext")
+
+    for filename in "${query_list[@]}"; do
+      ext="${filename##*.}"
+      base=$(basename "$filename" ."$ext")
+
+      echo "TEST: $base $ext"
+
+      echo "  Search $base.$ext against a sampling of sequences in families in target to determine best family match"
+      echo "  mmseqs easy-search 00_fasta/$filename $prot_fam_path 33_fam_match/$base.x.$target_base.m8 \\"
+      echo "    33_mmseqs_tmp --search-type ${SEQTYPE} --cov-mode 0 -c ${clust_cov} -v 1"
+      mmseqs easy-search "00_fasta/$filename" \
+                         "$prot_fam_path" \
+                         33_fam_match/"$base.x.$target_base.m8" \
+                         33_mmseqs_tmp \
+                         --search-type ${SEQTYPE} --cov-mode 0 -c "${clust_cov}" -v 1
+    done
+
+    # In the regex below, the targets look like GeneFamID__GeneID  ... and the __GeneID is discarded (leaving 12 columns)
+    for filepath in 33_fam_match/*.m8; do
+      base=$(basename "$filepath")
+      < "$filepath" perl -pe 's/^(\S+)\t([^_]+)__\S+/$1\t$2/' | # sort -k1,1 -k2,2 | calc_avg_bitscore_per_fam_hit.awk |
+        sort -k1,1 -k12nr,12nr | top_line.awk > 33_fam_match/"$base".top &
+      if [[ $(jobs -r -p | wc -l) -ge $((NPROC/2)) ]]; then wait -n; fi
+
+      # Once done with finding the top match per query, remove the large m8 files.
+      #rm $filepath
+    done
+    wait
+
+    echo "== Place sequences into families based on top protein match, using the consen_iden threshold of $consen_iden."
+    cat 33_fam_match/*.m8.top |
+      awk -v IDEN="${consen_iden}" '$3>=IDEN {print $2 "\t" $1}' |
+      sort -k1,1 -k2,2 | hash_to_rows_by_1st_col.awk > 34_sup_vs_fam_consen.clust.tsv
+
+    echo "== Derive gene family assignment (gfa) files"
+    for file in 33_fam_match/*.m8.top; do
+      base=$(basename "$file" .x.target_base.m8.top)
+      echo "$base";
+      cat "$file" |
+        awk -v OFS="\t" 'BEGIN{print "#gene", "family", "protein", "e-value", "score"}
+                           {print $1, $2, $1, $11, $10}' |
+          strip_spliceform.pl > "33_fam_match/$base.gfa.tsv"
+    done
+
+  elif [ "$search_method" == "hmmsearch" ]; then
+
+    for filename in "${query_list[@]}"; do
+      ext="${filename##*.}"
+      base=$(basename "$filename" ."$ext")
+      # Set --cpu 2 for hmmsearch because it is IO bound. Rather, get parallelization by running the searches in parallel.
+      echo "== Search $base.$ext against a HMMer database (compressed and indexed HMMs)"
+      echo "    hmmsearch -E $evalue --cpu 2 --tblout 33_fam_match/$base.hmmsearch.tbl -o /dev/null ${hmmdb_path} 00_fasta/${filename}"
+      hmmsearch -E "$evalue" --cpu 2 --tblout 33_fam_match/"$base".hmmsearch.tbl -o /dev/null "${hmmdb_path}" 00_fasta/"${filename}" &
+      # allow to execute up to $NPROC/2 in parallel
+      if [[ $(jobs -r -p | wc -l) -ge $((NPROC/2)) ]]; then wait -n; fi
+    done
+    wait
+    echo "== Parse tabular hmmsearch data, picking the top match per query"
+    for filepath in 33_fam_match/*.hmmsearch.tbl; do
+      file=$(basename "$filepath" .hmmsearch.tbl)
+      base=$(echo "$file" | perl -pe 's/(.+)\.\w+/$1/') # strips suffix like .protein_primary or .protein
+      hmmdb_name=$(basename "$hmmdb_path")
+      awk -v OFS="\t" '$1!~/^#/ {print $1, $3, $1, $5, $6}' "$filepath" |
+        sort -k1,1 -k5nr,5nr | top_line.awk |
+          strip_spliceform.pl > 33_fam_match/"${base}"."${hmmdb_name}".gfa.tsv &
+       # allow to execute up to $NPROC in parallel
+       if [[ $(jobs -r -p | wc -l) -ge ${NPROC} ]]; then wait -n; fi
+
+      # Once done with finding the top match per query, remove the large hmmsearch.tbl files.
+      rm "$filepath"
+    done
+    wait
+
+    echo "== Place sequences into families based on top protein match to HMM, using the E-value threshold of $evalue."
+    cat 33_fam_match/*.gfa.tsv |
+      awk -v EVAL="${evalue}" '$4<=EVAL {print $2 "\t" $1}' |
+      sort -k1,1 -k2,2 | hash_to_rows_by_1st_col.awk > 34_sup_vs_fam_consen.clust.tsv
+
+  else
+    echo "Unrecognized search_method: $search_method."
+    echo "Expected values are \"align_sample\ or \"hmmsearch\"."
+    exit 1
   fi
-done
 
-echo
-echo "== Search fasta files against HMM database"
-echo
-for querypath in 00_fasta/*; do
-  base=$(basename "$querypath" .faa)
-  echo "hmmsearch -E $EVALUE --cpu $THREADS --tblout 01_hmmsearch/$base.hmmsearch.tbl -o /dev/null ${DATA}/${hmmdb} ${querypath}"
-  hmmsearch -E "$EVALUE" --cpu "$THREADS" --tblout 01_hmmsearch/"$base".hmmsearch.tbl -o /dev/null "${DATA}"/"${hmmdb}" "${querypath}" &
-  # allow to execute up to $NPROC_PER_THREAD in parallel
-  if [[ $(jobs -r -p | wc -l) -ge ${NPROC_PER_THREAD} ]]; then wait -n; fi
-done
-wait
+  echo "  Reshape from mcl output format (clustered IDs on one line) to a hash format (clust_ID gene)"
+  perl -lane 'for $i (1..scalar(@F)-1){print $F[0], "\t", $F[$i]}' 34_sup_vs_fam_consen.clust.tsv > 34_sup_vs_fam_consen.hsh.tsv
+}
 
-echo
-echo "== Parse tabular hmmsearch data, picking the top match per query"
-echo
-for filepath in 01_hmmsearch/*.hmmsearch.tbl; do
-  file=$(basename "$filepath" .hmmsearch.tbl)
-  base=$(echo "$file" | perl -pe 's/(.+)\.\w+/$1/') # strips suffix like .protein_primary or .protein
-  cat /dev/null > 02_gfa/"${base}"."${hmmdb}".gfa.tsv
-  printf "#gene\tfamily\tprotein\te-value\tscore\n" > 02_gfa/"${base}"."${hmmdb}".gfa.tsv
-  awk -v OFS="\t" '$1!~/^#/ {print $1, $3, $1, $5, $6}' "$filepath" |
-    sort -k1,1 -k5nr,5nr | top_line.awk |
-      strip_spliceform.pl >> 02_gfa/"${base}"."${hmmdb}".gfa.tsv &
-   # allow to execute up to $NPROC in parallel
-   if [[ $(jobs -r -p | wc -l) -ge ${NPROC} ]]; then wait -n; fi
-done
-wait
+########################################
+# Main program
 
-cd "$OLDPWD" || exit
+run_ingest
+run_search_families
 
-echo
-echo "== Run completed. Look for results at $WORK/02_gfa/"
-echo
+export dependencies='hmmsearch famsa'
+NPROC=$( command -v nproc > /dev/null && nproc )
+if [[ $NPROC -lt 1 ]]; then NPROC=1; fi
+export NPROC=${NPROC:-1}
+
+echo "NPROC: $NPROC"
+
+declare consen_iden clust_cov evalue search_method prot_fam_path hmmdb_path
 
 exit 0
+

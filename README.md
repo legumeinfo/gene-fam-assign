@@ -1,20 +1,23 @@
 # gene-fam-assign
-Use hmmsearch to assign proteomes to LIS gene families
+Assign proteomes to gene families, using either hmmsearch or a sequence search against a sample of the sequences
+from all gene families.
 
 The code in this repository manages the assignment of gene sets (proteomes) to gene families, represented
-as hmmer hmm "databases" (compressed and indexed HMMs), for the LIS, SoyBase, and PeanutBase projects
-(or generally, for any set of proteomes against an HMM collection).
+either as hmmer hmm "databases" (compressed and indexed HMMs), or as a file of protein sequences from the 
+gene families, with identifiers comprised of the gene family ID followed by the sequence ID, e.g. 
+    >Legume.fam3.00001__singl.CAF01.gnm1.ann1.evm_model_Chr03_2437
+    >Legume.fam3.00001__glyma.Wm82.gnm4.ann1.Glyma.06G281100.1
+    >Legume.fam3.00001__tripr.MilvusB.gnm2.ann1.mRNA40501
 
-Also see https://github.com/legumeinfo/lis_gfa/ , which accomplishes the same task, using a singularity container
-rather than a conda environment. The approaches mainly differ in the hmmsearch intermediate formats and parsing approaches.
-The management of parallelization is also somewhat different -- the present repo relying more on parallelization
-via spawning multiple `hmmsearch` tasks and `lis_gfa` relying on the `--cpu` parameter of `hmmsearch`.  The present approach 
-should be faster, considering IO limitations of `hmmsearch`, though we have not made head-to-head comparisons of the two.
+The utility "bin/make_reduced_fam_sample.sh" creates a target file of protein sequences, given a directory
+of protein seuqences from all gene families. The code was designed for the LIS, SoyBase, and PeanutBase 
+projects, but should be applicable for any set of proteomes against either a suitably formatted protein 
+sequence target or an HMM collection.
 
 ## Installation
 
-The only required dependency is the [hmmer package](http://hmmer.org). Install this and put
-the executables on your path however you prefer. One way:
+The only required dependencies are is the [hmmer package](http://hmmer.org) and [mmseqs2](https://github.com/soedinglab/mmseqs2). 
+Install these and put the executables on your path however you prefer. One way:
 
 To create a conda environment called `hmmer` from the environment.yml in this repository:
 
