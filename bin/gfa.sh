@@ -25,7 +25,7 @@ SYNOPSIS
            -c  - path to the config file
 
   Options: -h  - help
-           -t  - threads (or may be set in config file; see comments below)
+           -t  - target_base - name for constructing output gfa filenames, e.g. the name of the family collection
 
   VARIABLES set in config file:
     search_method - align_sample (against family protein files) or  hmmsearch (against family HMMs)
@@ -50,13 +50,14 @@ fi
 # Command-line interpreter
 filepath_list="null"
 config="null"
+target_base="null"
 
 while getopts "l:c:t:h" opt
 do
   case $opt in
     l) filepath_list=$OPTARG; echo "filepath_list: $config" ;;
     c) config=$OPTARG; echo "config: $config" ;;
-    t) threads=$OPTARG; echo "threads: $threads" ;;
+    t) target_base=$OPTARG; echo "target_base: $target_base" ;;
     h) echo >&2 "$HELP_DOC" && exit 0 ;;
     *) echo >&2 echo "$HELP_DOC" && exit 1 ;;
   esac
@@ -169,22 +170,23 @@ run_search_families() {
     mkdir -p 33_mmseqs_tmp
 
     if [ ! -f "${prot_fam_path}" ]; then
-      echo "To place the supplementary sequences into gene families, the directory ${prot_fam_path} must exist"
-      echo "(containing protein sequence in each family, from a previous run of \"pandagma fam\")."
+      echo "To place the supplementary sequences into gene families, the file ${prot_fam_path} must exist."
       echo "The specified prot_fam_path was: ${prot_fam_path}"
       exit 1
     fi
 
     SEQTYPE=1 # 3=nuc; 1=pep
 
-    target_ext="${prot_fam_path##*.}"
-    target_base=$(basename "$prot_fam_path" ".$target_ext")
+    if [ "$target_base" == "null" ]; then
+      target_ext="${prot_fam_path##*.}"
+      target_base=$(basename "$prot_fam_path" ".$target_ext")
+    fi
 
     for filename in "${query_list[@]}"; do
       ext="${filename##*.}"
       base=$(basename "$filename" ."$ext")
 
-      echo "TEST: $base $ext"
+      echo "PROCESSING $base $ext"
 
       echo "  Search $base.$ext against a sampling of sequences in families in target to determine best family match"
       echo "  mmseqs easy-search 00_fasta/$filename $prot_fam_path 33_fam_match/$base.x.$target_base.m8 \\"
@@ -215,7 +217,7 @@ run_search_families() {
 
     echo "== Derive gene family assignment (gfa) files"
     for file in 33_fam_match/*.m8.top; do
-      base=$(basename "$file" .x.target_base.m8.top)
+      base=$(basename "$file" .m8.top)
       echo "$base";
       cat "$file" |
         awk -v OFS="\t" 'BEGIN{print "#gene", "family", "protein", "e-value", "score"}
@@ -280,7 +282,7 @@ export NPROC=${NPROC:-1}
 
 echo "NPROC: $NPROC"
 
-declare consen_iden clust_cov evalue search_method prot_fam_path hmmdb_path
+declare consen_iden clust_cov evalue search_method prot_fam_path hmmdb_path threads work_dir
 
 exit 0
 
