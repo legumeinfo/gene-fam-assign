@@ -22,7 +22,7 @@ source activate pandagma
 
 PATH=$PWD/bin:$PATH
 
-gfa.sh -l data/lis.protein_files -c config/gfa.conf
+gfa.sh -l data/lis.protein_files -c config/gfa.conf -t legume.fam3.VLMQ
 
 date   # print timestamp
 
