@@ -190,14 +190,12 @@ run_search_families() {
 
       echo "PROCESSING $base $ext"
 
-      echo "  Search $base.$ext against a sampling of sequences in families in target to determine best family match"
-      echo "  mmseqs easy-search 00_fasta/$filename $prot_fam_path 33_fam_match/$base.x.$target_base.m8 \\"
-      echo "    33_mmseqs_tmp --search-type ${SEQTYPE} --cov-mode 2 -c ${clust_cov} -v 1"
       mmseqs easy-search "00_fasta/$filename" \
                          "$prot_fam_path" \
                          33_fam_match/"$base.x.$target_base.m8" \
                          33_mmseqs_tmp \
-                         --search-type ${SEQTYPE} --cov-mode 2 -c "${clust_cov}" -v 1
+                         --search-type ${SEQTYPE} --cov-mode 2 -c "${clust_cov}" -v 1 \
+                         --format-output "query,target,fident,alnlen,mismatch,gapopen,qstart,qend,tstart,tend,evalue,bits,qcov,tcov"
                          #--search-type ${SEQTYPE} --cov-mode 0 -c "${clust_cov}" -v 1
     done
 
@@ -220,8 +218,8 @@ run_search_families() {
       base=$(basename "$file" .m8.top)
       echo "$base";
       cat "$file" |
-        awk -v OFS="\t" 'BEGIN{print "#gene", "family", "protein", "e-value", "score"}
-                           {print $1, $2, $1, $11, $10}' |
+        awk -v OFS="\t" 'BEGIN{print "#gene", "family", "protein", "e-value", "score", "qcov", "tcov"}
+                           {print $1, $2, $1, $11, $12, $13, $14}' |
           strip_spliceform.pl > "02_gfa/$base.gfa.tsv"
     done
 
