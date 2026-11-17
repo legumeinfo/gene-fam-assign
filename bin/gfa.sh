@@ -26,6 +26,7 @@ SYNOPSIS
 
   Options: -h  - help
            -t  - target_base - name for constructing output gfa filenames, e.g. the name of the family collection
+           -r  - remove temp files (remove the large mmseqs m8 match file or hmmsearch hmmsearch.tbl file)
 
   VARIABLES set in config file:
     search_method - align_sample (against family protein files) or  hmmsearch (against family HMMs)
@@ -33,7 +34,7 @@ SYNOPSIS
     prot_fam_path - Path to multi-fasta protein file representing all gene families
     evalue        - E-value threshold for hmmsearch [1e-10]
     consen_iden   - Minimum identity threshold for mmseqs matches [0.30]
-    clust_cov     - Minimum alignment coverage for mmseqs matches [0.40]
+    clust_cov     - Minimum alignment (query coverage; cov-mode 2) for mmseqs matches [0.40]
     data_dir      - Directory for HMM database [data]; also a reasonable place to put the list of fasta filepaths
     work_dir      - Directory where all work will be done
     threads       - Value for hmmsearch --cpu. [2] Recommended to be small (2), as most of the parallelism comes
@@ -51,13 +52,15 @@ fi
 filepath_list="null"
 config="null"
 target_base="null"
+remove_tmp=0
 
-while getopts "l:c:t:h" opt
+while getopts "l:c:t:r:h" opt
 do
   case $opt in
     l) filepath_list=$OPTARG; echo "filepath_list: $config" ;;
     c) config=$OPTARG; echo "config: $config" ;;
     t) target_base=$OPTARG; echo "target_base: $target_base" ;;
+    r) remove_tmp=$OPTARG; echo "remove_tmp: $remove_tmp" ;;
     h) echo >&2 "$HELP_DOC" && exit 0 ;;
     *) echo >&2 echo "$HELP_DOC" && exit 1 ;;
   esac
@@ -118,7 +121,7 @@ run_ingest() {
   echo
   echo "== Copy files into working directory, and uncompress"
   cd "${WD}" || exit
-  mkdir -p 00_fasta 01_hmmsearch 02_gfa
+  mkdir -p 00_fasta
 
   query_list=()
   ct=0
@@ -164,10 +167,9 @@ run_search_families() {
   echo "Search provided annotation sets (protein) against family consensus sequences or HMMs"
 
   #if [ -d 33_fam_match ]; then rm -rf 33_fam_match; fi
-  mkdir -p 33_fam_match
 
   if [ "$search_method" == "align_sample" ]; then
-    mkdir -p 33_mmseqs_tmp
+    mkdir -p 33_mmseqs_tmp 33_fam_match 02_gfa
 
     if [ ! -f "${prot_fam_path}" ]; then
       echo "To place the supplementary sequences into gene families, the file ${prot_fam_path} must exist."
@@ -190,12 +192,13 @@ run_search_families() {
 
       echo "  Search $base.$ext against a sampling of sequences in families in target to determine best family match"
       echo "  mmseqs easy-search 00_fasta/$filename $prot_fam_path 33_fam_match/$base.x.$target_base.m8 \\"
-      echo "    33_mmseqs_tmp --search-type ${SEQTYPE} --cov-mode 0 -c ${clust_cov} -v 1"
+      echo "    33_mmseqs_tmp --search-type ${SEQTYPE} --cov-mode 2 -c ${clust_cov} -v 1"
       mmseqs easy-search "00_fasta/$filename" \
                          "$prot_fam_path" \
                          33_fam_match/"$base.x.$target_base.m8" \
                          33_mmseqs_tmp \
-                         --search-type ${SEQTYPE} --cov-mode 0 -c "${clust_cov}" -v 1
+                         --search-type ${SEQTYPE} --cov-mode 2 -c "${clust_cov}" -v 1
+                         #--search-type ${SEQTYPE} --cov-mode 0 -c "${clust_cov}" -v 1
     done
 
     # In the regex below, the targets look like GeneFamID__GeneID  ... and the __GeneID is discarded (leaving 12 columns)
@@ -206,7 +209,9 @@ run_search_families() {
       if [[ $(jobs -r -p | wc -l) -ge $((NPROC/2)) ]]; then wait -n; fi
 
       # Once done with finding the top match per query, remove the large m8 files.
-      rm $filepath
+      if [[ $remove_tmp ]]; then
+        rm "$filepath"
+      fi
     done
     wait
 
@@ -226,6 +231,7 @@ run_search_families() {
       sort -k1,1 -k2,2 | uniq | hash_to_rows_by_1st_col.awk > 34_sup_vs_fam_consen.clust.tsv
 
   elif [ "$search_method" == "hmmsearch" ]; then
+    mkdir -p 01_hmmsearch 02_gfa
 
     for filename in "${query_list[@]}"; do
       ext="${filename##*.}"
@@ -250,8 +256,10 @@ run_search_families() {
        # allow to execute up to $NPROC in parallel
        if [[ $(jobs -r -p | wc -l) -ge ${NPROC} ]]; then wait -n; fi
 
-     # Once done with finding the top match per query, remove the large hmmsearch.tbl files.
-      rm "$filepath"
+      # Once done with finding the top match per query, remove the large hmmsearch.tbl files.
+      if [[ $remove_tmp ]]; then
+        rm "$filepath"
+      fi
     done
     wait
 
