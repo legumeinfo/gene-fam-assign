@@ -54,13 +54,13 @@ config="null"
 target_base="null"
 remove_tmp=0
 
-while getopts "l:c:t:r:h" opt
+while getopts "l:c:t:rh" opt
 do
   case $opt in
     l) filepath_list=$OPTARG; echo "filepath_list: $config" ;;
     c) config=$OPTARG; echo "config: $config" ;;
     t) target_base=$OPTARG; echo "target_base: $target_base" ;;
-    r) remove_tmp=$OPTARG; echo "remove_tmp: $remove_tmp" ;;
+    r) remove_tmp=1 ;;
     h) echo >&2 "$HELP_DOC" && exit 0 ;;
     *) echo >&2 echo "$HELP_DOC" && exit 1 ;;
   esac
