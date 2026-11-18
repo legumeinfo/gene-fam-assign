@@ -218,8 +218,8 @@ run_search_families() {
       base=$(basename "$file" .m8.top)
       echo "$base";
       cat "$file" |
-        awk -v OFS="\t" 'BEGIN{print "#gene", "family", "protein", "e-value", "score", "qcov", "tcov"}
-                           {print $1, $2, $1, $11, $12, $13, $14}' |
+        awk -v OFS="\t" -v EVAL=${evalue} 'BEGIN{print "#gene", "family", "protein", "e-value", "score", "qcov", "tcov"}
+                           $11<=EVAL {print $1, $2, $1, $11, $12, $13, $14}' |
           strip_spliceform.pl > "02_gfa/$base.gfa.tsv"
     done
 
